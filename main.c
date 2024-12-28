@@ -3,17 +3,20 @@
 #include <curl/curl.h>
 #include <stdlib.h>
 
-struct MemoryStruct {
+struct MemoryStruct
+{
     char *memory;
     size_t size;
 };
 
-static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp) {
+static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
     size_t real_size = size * nmemb;
     struct MemoryStruct *mem = (struct MemoryStruct *)userp;
 
     char *ptr = realloc(mem->memory, mem->size + real_size + 1);
-    if (ptr == NULL) {
+    if (ptr == NULL)
+    {
         return 0;
     }
 
@@ -25,17 +28,21 @@ static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, voi
     return real_size;
 }
 
-char *get_image_url_from_response(const char *json_response) {
+char *get_image_url_from_response(const char *json_response)
+{
     const char *key = "\"url\":\"";
     char *start = strstr(json_response, key);
 
-    if (start) {
+    if (start)
+    {
         start += strlen(key);
         char *end = strchr(start, '\"');
-        if (end) {
+        if (end)
+        {
             size_t url_length = end - start;
             char *url = (char *)malloc(url_length + 1);
-            if (url) {
+            if (url)
+            {
                 strncpy(url, start, url_length);
                 url[url_length] = '\0';
                 return url;
@@ -45,58 +52,77 @@ char *get_image_url_from_response(const char *json_response) {
     return NULL;
 }
 
-int main(void) {
+char *fetch_data_from_url(const char *url)
+{
     CURL *http_handle;
-    CURLM *multi_handle;
-    int still_running = 1;
     struct MemoryStruct chunk;
-
     chunk.memory = malloc(1);
     chunk.size = 0;
 
     curl_global_init(CURL_GLOBAL_DEFAULT);
-
     http_handle = curl_easy_init();
 
-    curl_easy_setopt(http_handle, CURLOPT_URL, "https://api.waifu.im/search");
+    curl_easy_setopt(http_handle, CURLOPT_URL, url);
     curl_easy_setopt(http_handle, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(http_handle, CURLOPT_WRITEDATA, (void *)&chunk);
 
-    multi_handle = curl_multi_init();
-
+    CURLM *multi_handle = curl_multi_init();
     curl_multi_add_handle(multi_handle, http_handle);
 
-    do {
+    int still_running = 1;
+    do
+    {
         CURLMcode mc = curl_multi_perform(multi_handle, &still_running);
 
         if (!mc)
             mc = curl_multi_poll(multi_handle, NULL, 0, 1000, NULL);
 
-        if (mc) {
+        if (mc)
+        {
             fprintf(stderr, "curl_multi_poll() failed, code %d.\n", (int)mc);
             break;
         }
-
     } while (still_running);
 
     curl_multi_remove_handle(multi_handle, http_handle);
-
     curl_easy_cleanup(http_handle);
-
     curl_multi_cleanup(multi_handle);
 
-    if (chunk.memory) {
-        char *image_url = get_image_url_from_response(chunk.memory);
-        if (image_url) {
-            printf("Extracted URL: %s\n", image_url);
-            free(image_url);
-        } else {
-            printf("URL not found in the response.\n");
-        }
+    char *response = NULL;
+    if (chunk.memory)
+    {
+        response = strdup(chunk.memory);
         free(chunk.memory);
     }
 
     curl_global_cleanup();
+
+    return response;
+}
+
+int main(void)
+{
+    const char *url = "https://api.waifu.im/search?is_nsfw=true";
+    char *response = fetch_data_from_url(url);
+
+    if (response)
+    {
+        char *image_url = get_image_url_from_response(response);
+        if (image_url)
+        {
+            printf("Extracted URL: %s\n", image_url);
+            free(image_url);
+        }
+        else
+        {
+            printf("URL not found in the response.\n");
+        }
+        free(response);
+    }
+    else
+    {
+        printf("Failed to fetch data from the URL.\n");
+    }
 
     return 0;
 }
