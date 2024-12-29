@@ -101,7 +101,7 @@ void print_usage(const char *prog_name)
 int create_directory(const char *dir)
 {
 #ifdef _WIN32
-    if (_mkdir(dir) != 0 && errno != EEXIST)
+    if (_mkdir(dir) != 0 && errno != 17)
     {
         perror("Error creating directory");
         return 1;
